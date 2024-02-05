@@ -1,0 +1,42 @@
+{{- if  .Values.ingress_public.enabled -}}
+{{- $fullName := include "reporting-service.fullname" . -}}
+{{- $svcPort := .Values.service_public.port -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "reporting-service.fullname" . }}
+  labels:
+    {{- include "reporting-service.labels" . | nindent 4 }}
+  {{- with .Values.ingress_public.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress_public.class }}
+    {{- if .Values.ingress_public.tls }}
+  tls:
+      {{- range .Values.ingress_public.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote}}
+        {{- end }}
+      secretName: {{ .secretName }}
+      {{- end }}
+    {{- end }}
+  rules:
+    {{- $ingressPath := .Values.ingress_public.path -}}
+    {{- range .Values.ingress_public.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}
+                port:
+                  number: {{ .port }}
+          {{- end }}    
+     {{- end }}
+{{- end }}

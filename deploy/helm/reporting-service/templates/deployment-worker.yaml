@@ -1,0 +1,169 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "reporting-service.fullname" . }}-worker
+  labels:
+    {{- include "reporting-service.labels" . | nindent 4 }}
+    environment: {{ .Values.environment }}
+spec:
+  replicas: {{ .Values.workerReplicaCount }}
+  minReadySeconds: 60
+  serviceName: reporting-service
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "reporting-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        timestamp: {{ now | quote }}
+        {{- with .Values.podAnnotations }}
+          {{- toYaml . | nindent 8 }} 
+        {{- end }}
+      labels:
+        {{- include "reporting-service.selectorLabels" . | nindent 8 }}
+        environment: {{ .Values.environment }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      securityContext:
+      serviceAccountName: {{ include "reporting-service.serviceAccountName" . }}
+      containers:
+        {{- if .Values.app.enabled }}
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/entrypoint.sh", "--configuration-file=/usr/local/adgear-reporting/conf/{{ .Values.environment }}/configuration.yml"]
+          ports:
+            - name: http
+              containerPort: 12202
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          {{ if .Values.prob.enabled }}
+          {{- with (first .Values.ingress_public.hosts) }}
+          readinessProbe:
+            tcpSocket:
+              port: 12202
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            successThreshold: 1
+            failureThreshold: 2
+            timeoutSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 12202
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            successThreshold: 1
+            failureThreshold: 2
+            timeoutSeconds: 10
+          {{- end }}
+          {{ end }}
+          resources:
+            {{ toYaml .Values.app.resources | nindent 14 }}
+          volumeMounts:
+            - mountPath: /usr/local/adgear-reporting/conf/{{ .Values.environment }}/configuration.yml
+              name: app-configmap
+              subPath: configuration.yml
+            - mountPath: /usr/local/adgear-reporting/conf/{{ .Values.environment }}/template/trader-production-email.mustache
+              name: app-configmap
+              subPath: trader-email-template.mustache
+            - mountPath:  /usr/local/adgear-reporting/conf/{{ .Values.environment }}/template/trader-staging-email.mustache
+              name: app-configmap
+              subPath: trader-email-template.mustache
+            - mountPath: /var/lib/adgear-reporting-{{ .Values.environment }}/
+              name: {{ include "reporting-service.fullname" . }}-pvc
+          env:
+          - name: VERTICA_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: VERTICA_USERNAME
+          - name: VERTICA_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: VERTICA_PASSWORD
+          - name: RDS_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: RDS_USERNAME
+          - name: RDS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: RDS_PASSWORD
+        {{- end }}
+        - name: reporting-service-memcached
+          image: memcached:1.6.15-alpine
+          command: ["memcached"]
+          ports:
+              - name: memcached
+                containerPort: 11211
+                protocol: TCP
+          resources:
+              limits:
+                cpu: 2
+                memory: 3Gi
+              requests:
+                cpu: 1
+                memory: 2Gi
+        - name: reporting-service-postfix
+          image: adgear-docker.jfrog.io/adgear/postfix@sha256:9905f7b162cf5304269615e6563b230761e8949b048ae2ea7740c46255fb198e
+          resources:
+              limits:
+                cpu: 2
+                memory: 3Gi
+              requests:
+                cpu: 1
+                memory: 2Gi
+          env:
+          - name: TX_SMTP_RELAY_HOST
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: TX_SMTP_RELAY_HOST
+          - name: TX_SMTP_RELAY_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: TX_SMTP_RELAY_USERNAME
+          - name: TX_SMTP_RELAY_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: TX_SMTP_RELAY_PASSWORD
+          ports:
+          - name: smtp
+            containerPort: 25
+          volumeMounts:
+          - mountPath: /var/spool/postfix/
+            name: metrics
+          - mountPath: /data/log/
+            name: logs
+
+      volumes:
+      - name: app-configmap
+        configMap:
+          name: app-configmap
+      - name: metrics
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+  volumeClaimTemplates:         
+  - metadata:
+      name: {{ include "reporting-service.fullname" . }}-pvc
+    spec:
+      storageClassName: gp3-wait-delete-default
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 8Gi

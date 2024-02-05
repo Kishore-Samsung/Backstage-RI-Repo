@@ -1,0 +1,171 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "reporting-service.fullname" . }}-api
+  labels:
+    {{- include "reporting-service.labels" . | nindent 4 }}
+    environment: {{ .Values.environment }}
+spec:
+  replicas: {{ .Values.apiReplicaCount }}
+  minReadySeconds: 120
+  selector:
+    matchLabels:
+      {{- include "reporting-service-api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        timestamp: {{ now | quote }}
+        {{- with .Values.podAnnotations }}
+          {{- toYaml . | nindent 8 }} 
+        {{- end }}
+      labels:
+        {{- include "reporting-service-api.selectorLabels" . | nindent 8 }}
+        environment: {{ .Values.environment }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      securityContext:
+      serviceAccountName: {{ include "reporting-service.serviceAccountName" . }}
+      containers:
+        {{- if .Values.app.enabled }}
+        - name: {{ .Chart.Name }}-api
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/entrypoint.sh", "--configuration-file=/usr/local/adgear-reporting/conf/{{ .Values.environment }}/configuration.yml"]
+          ports:
+            - name: http
+              containerPort: 12202
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          {{ if .Values.prob.enabled }}
+          {{- with (first .Values.ingress_public.hosts) }}
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: 80
+              httpHeaders:
+                 - name: Host
+                   value: {{ .host }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 2
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: 80
+              httpHeaders:
+                 - name: Host
+                   value: {{ .host }}
+
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 2
+          {{- end }}
+          {{ end }}
+          resources:
+            {{ toYaml .Values.app.resources | nindent 14 }}
+          volumeMounts:
+            - mountPath: /usr/local/adgear-reporting/conf/{{ .Values.environment }}/configuration.yml
+              name: api-app-configmap
+              subPath: configuration.yml
+            - mountPath: /usr/local/adgear-reporting/conf/{{ .Values.environment }}/template/trader-production-email.mustache
+              name: api-app-configmap
+              subPath: trader-email-template.mustache
+            - mountPath:  /usr/local/adgear-reporting/conf/{{ .Values.environment }}/template/trader-staging-email.mustache
+              name: api-app-configmap
+              subPath: trader-email-template.mustache
+          env:
+          - name: VERTICA_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: VERTICA_USERNAME
+          - name: VERTICA_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: VERTICA_PASSWORD
+          - name: RDS_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: RDS_USERNAME
+          - name: RDS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: RDS_PASSWORD
+        {{- end }}
+        - name: {{ .Chart.Name }}-nginx
+          image: {{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag }}
+          resources:
+            {{ toYaml .Values.nginx.resources | nindent 14 }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "/usr/sbin/nginx -s quit"]
+          command: ["/bin/sh", "-c"]
+          args:
+          - |
+            envsubst '$internal_grant' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+            nginx -g "daemon off;"
+          ports:
+          - name: nginx
+            containerPort: 8082
+            protocol: TCP
+          {{ if .Values.metrics.enabled }}
+          - name: metrics
+            containerPort: 8081
+            protocol: TCP
+          {{- end }}
+          env:
+          - name: internal_grant
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "reporting-service.fullname" . }}-secret
+                key: internalgrant
+          volumeMounts:
+          - mountPath: /etc/nginx/nginx.conf
+            name: nginx-configmap
+            subPath: nginx.conf
+          - mountPath: /etc/nginx/misc.d/adgear_reporting_trusted.conf
+            name: nginx-configmap
+            subPath: adgear_reporting_trusted.conf
+          - mountPath: /etc/nginx/upstreams.d/adgear_reporting_service.conf
+            name: nginx-configmap
+            subPath: adgear_reporting_service.conf
+          - mountPath: /etc/nginx/templates/default.conf.template
+            name: nginx-configmap
+            subPath: reporting-service.trader.adgear.com.conf
+        - name: reporting-service-memcached
+          image: memcached:1.6.15-alpine
+          command: ["memcached"]
+          ports:
+              - name: memcached
+                containerPort: 11211
+                protocol: TCP
+          resources:
+              limits:
+                cpu: 2
+                memory: 3Gi
+              requests:
+                cpu: 1
+                memory: 2Gi
+      volumes:
+      - name: nginx-configmap
+        configMap:
+          defaultMode: 511
+          name: nginx-configmap
+      - name: api-app-configmap
+        configMap:
+          name: api-app-configmap

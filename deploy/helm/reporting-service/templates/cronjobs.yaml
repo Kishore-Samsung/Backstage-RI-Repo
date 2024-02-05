@@ -1,0 +1,85 @@
+{{ if .Values.acl_sync.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: reporting-crons
+spec:
+  schedule: "0,15,30,45 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          securityContext:
+            runAsUser: 1001
+            runAsGroup: 1001
+            fsGroup: 1001
+          containers:
+          - name: acl-sync-container
+            image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+            imagePullPolicy: {{ .Values.image.pullPolicy }}
+            command:
+            - /bin/bash
+            - /usr/local/adgear-reporting/bin/refresh_acls
+            args: ["/usr/local/adgear-reporting/conf/configuration.sh"]
+            resources:
+              limits:
+                cpu: 2
+                memory: 3Gi
+              requests:
+                cpu: 1
+                memory: 2Gi
+            volumeMounts:
+            - mountPath: /usr/local/adgear-reporting/conf/configuration.sh
+              name: app-configmap
+              subPath: configuration.sh
+            - mountPath: /usr/local/adgear-reporting/bin/refresh_acls
+              name: app-configmap
+              subPath: refresh_acls
+            env:
+            - name: acl_sync_srcuser
+              valueFrom:
+                secretKeyRef:
+                  name: reporting-service-secret
+                  key: acl_sync_srcuser
+            - name: acl_sync_srcpasswd
+              valueFrom:
+                secretKeyRef:
+                  name: reporting-service-secret
+                  key: acl_sync_srcpasswd
+            - name: acl_sync_srchost
+              valueFrom:
+                secretKeyRef:
+                  name: reporting-service-secret
+                  key: acl_sync_srchost
+            - name: acl_sync_targetuser
+              valueFrom:
+                secretKeyRef:
+                  name: reporting-service-secret
+                  key: acl_sync_targetuser
+            - name: acl_sync_targetpasswd
+              valueFrom:
+                secretKeyRef:
+                  name: reporting-service-secret
+                  key: acl_sync_targetpasswd
+            - name: acl_sync_targethost
+              valueFrom:
+                secretKeyRef:
+                  name: reporting-service-secret
+                  key: acl_sync_targethost
+            - name: PRUNE_AUTH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: reporting-service-secret
+                  key: PRUNE_AUTH_USERNAME
+            - name: PRUNE_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: reporting-service-secret
+                  key: PRUNE_AUTH_PASSWORD
+          volumes:
+          - name: app-configmap
+            configMap:
+               name: app-configmap
+               defaultMode: 0754
+          restartPolicy: OnFailure
+{{- end }}

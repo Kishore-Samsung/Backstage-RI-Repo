@@ -1,0 +1,42 @@
+{{- if .Values.db_migration.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "reporting-service.fullname" .  }}-db-migrate
+  labels:
+    {{- include "reporting-service.labels" . | nindent 4 }}
+    {{- include "shared.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: {{ include "reporting-service.fullname" .  }}
+        release: {{ .Release.Name }}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: {{ .Chart.Name }}
+        {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+        {{- end }}
+          image: {{ template "reporting-service.image" .Values.image }}
+          volumeMounts:
+          - mountPath: /usr/local/adgear-reporting-staging/conf/staging/configuration.yml
+            name:  {{ include "reporting-service.fullname" . }}-config-volume
+            subPath: reference.yaml
+          resources:
+            {{ toYaml .Values.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name:  {{ include "reporting-service.fullname" . }}-env-configmap
+          command: ["migrate"]
+          args: ["-database", {{ .Values.vault.INTERNAL_DB_URL }}, "-path", "db/migrations", "up" ]
+      volumes:
+        - name: {{ include "reporting-service.fullname" . }}-config-volume
+          configMap:
+            name: {{ include "reporting-service.fullname" . }}-configmap
+{{- end }}

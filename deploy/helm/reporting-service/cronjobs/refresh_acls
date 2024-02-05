@@ -1,0 +1,36 @@
+set -euf -o pipefail
+
+MYPATH=$(dirname "$0")
+
+CONF_FILE="$1"
+source "$CONF_FILE"
+
+
+
+for product_env in "${PRODUCT_ENVS[@]}"
+do
+
+        read product env <<< "$product_env"
+        acl_sync_farm="${PRODUCT_ENV_CONFIGS[$product,$env,acl_sync_farm]}"
+        acl_sync_instance="${PRODUCT_ENV_CONFIGS[$product,$env,acl_sync_instance]}"
+        acl_sync_srchost="${PRODUCT_ENV_CONFIGS[$product,$env,acl_sync_srchost]}"
+        acl_sync_srcuser="${PRODUCT_ENV_CONFIGS[$product,$env,acl_sync_srcuser]}"
+        acl_sync_targethost="${PRODUCT_ENV_CONFIGS[$product,$env,acl_sync_targethost]}"
+
+  if [ ! -z "${PRODUCT_ENV_CONFIGS[$product,$env,acl_sync_srcpasswd]}" ];then
+          acl_sync_srcpasswd="${PRODUCT_ENV_CONFIGS[$product,$env,acl_sync_srcpasswd]}"
+    srcpasswd_arg="--srcpasswd=$acl_sync_srcpasswd"
+  else
+    srcpasswd_arg=""
+  fi
+
+  if [ ! -z "${PRODUCT_ENV_CONFIGS[$product,$env,acl_sync_targetpasswd]}" ];then
+          acl_sync_targetpasswd="${PRODUCT_ENV_CONFIGS[$product,$env,acl_sync_targetpasswd]}"
+        targetpasswd_arg="--targetpasswd=${acl_sync_targetpasswd}"
+  else
+    targetpasswd_arg=""
+  fi
+
+        $MYPATH/acl-sync $srcpasswd_arg $targetpasswd_arg --targethost="${acl_sync_targethost}" --srchost="${acl_sync_srchost}" --srcuser="${acl_sync_srcuser}" "${product}" "${acl_sync_farm}" "${acl_sync_instance}"
+done
+

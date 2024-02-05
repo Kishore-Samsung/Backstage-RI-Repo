@@ -1,0 +1,377 @@
+server:
+  type: simple
+
+  register_default_exception_mappers: false
+
+  # Maximum number of threads.
+  max_threads: 100
+
+  # Minimum number of thread to keep alive.
+  min_threads: 10
+
+  # If non-zero, the server will allow worker threads to finish processing requests after the server
+  # socket has been closed for the given amount of time.
+  shutdown_grace_period: 2s
+
+  # HTTP request log settings
+  requestLog:
+    appenders:
+      - type: console
+
+      # Settings for logging to a file.
+      - type: file
+        # The file to which statements will be logged.
+        current_log_filename: /var/log/adgear-reporting/staging/requests.log
+
+        #  When the log file rolls over, the file will be archived to example-2012-03-15.log.gz,
+        # example.log will be truncated, and new statements written to it.
+        archived_log_filename_pattern: /var/log/adgear-reporting/staging/requests-%d.log.gz
+
+        # The maximum number of log files to archive.
+        archived_file_count: 30
+
+  # HTTP-specific options.
+  connector:
+    type: http
+
+    # The hostname of the interface to which the HTTP server socket wil be found. If omitted, the
+    # socket will listen on all interfaces.
+    # bind_host: app1.example.com
+    bind_host: 0.0.0.0
+
+    # The port on which the HTTP server listens for service requests.
+    port: 12202
+
+    # Maximum idle time for a connection, which roughly translates to the
+    # java.net.Socket#setSoTimeout(int) call, although with NIO implementations
+    # other mechanisms may be used to implement the timeout. The max idle time
+    # is applied when waiting for a new message to be received on a connection
+    # or when waiting for a new message to be sent on a connection. This value
+    # is interpreted as the maximum time between some progress being made on
+    # the connection. So if a single byte is read or written, then the timeout
+    # is reset.
+    idle_timeout: 60s
+
+    # The number of threads dedicated to accepting connections. If omitted, this defaults to the
+    # number of logical CPUs on the current machine.
+    acceptor_threads: 3
+
+    # The number of unaccepted requests to keep in the accept queue before refusing connections. If
+    # set to -1 or omitted, the system default is used.
+    accept_queue_size: 100
+
+    # Enables SO_REUSEADDR on the server socket.
+    reuse_address: true
+
+    # Enables SO_LINGER on the server socket with the specified linger time.
+    # WARNING: it is highly recommanded to disable this, otherwise slow clients
+    # may act funkily and suffer data loss.
+    # so_linger_time: 1s
+
+    # Size of the per-connection input buffer.
+    input_buffer_size: 8k
+
+    # Size of the buffer into which response content is aggregated before being
+    # sent to the client. A larger buffer can improve performance by allowing a
+    # content producer to run without blocking, however larger buffers consume
+    # more memory and may induce some latency before a client starts processing
+    # the content.
+    output_buffer_size: 256k
+
+    # The minimum size of the buffer pool.
+    min_buffer_pool_size: 64b
+
+    # The increment by which the buffer pool should be increased.
+    buffer_pool_increment: 1k
+
+    # The maximum size of the buffer pool.
+    max_buffer_pool_size: 16m
+
+  # The context path of the application servlets, including Jersey.
+  application_context_path: /
+
+  # The context path of the admin servlets, including metrics and tasks.
+  admin_context_path: /admin
+
+# Logging settings.
+logging:
+
+  # The default level of all loggers. Can be OFF, ERROR, WARN, INFO, DEBUG, TRACE, or ALL.
+  level: INFO
+
+  # Logger-specific levels.
+  loggers:
+    com.adgear.reporting: INFO
+    com.adgear.reporting.util.OptimalTablePicker: DEBUG
+    org.hibernate.orm.deprecation: ERROR
+    org.apache.poi: WARN
+
+    org.jdbcdslog: WARN
+    org.jdbcdslog.SlowQueryLogger: INFO
+
+  appenders:
+    # Settings for logging to stdout.
+    - type: console
+
+      # Do not display log statements below this threshold to stdout.
+      threshold: ALL
+
+      log_format: '%-2level [%d] %X{prefix}%c: %m%n'
+
+    # Settings for logging to a file.
+    - type: file
+
+      # Do not write log statements below this threshold to the file.
+      threshold: ALL
+
+      # The file to which statements will be logged.
+      current_log_filename: /var/log/adgear-reporting/staging/app.log
+
+      #  When the log file rolls over, the file will be archived to example-2012-03-15.log.gz,
+      # example.log will be truncated, and new statements written to it.
+      archived_log_filename_pattern: /var/log/adgear-reporting/staging/app-%d.log.gz
+
+      # The maximum number of log files to archive.
+      archived_file_count: 5
+
+      log_format: '%-2level [%d] %X{prefix}%c: %m%n'
+
+# Database settings.
+vertica_database:
+
+  # the name of your JDBC driver
+  driver_class: org.jdbcdslog.DriverLoggingProxy
+
+  # the username
+  user: ${VERTICA_USERNAME}
+
+  # the password
+  password: ${VERTICA_PASSWORD}
+
+  # the JDBC URL
+  url: jdbc:jdbcdslog:vertica://192.168.30.33:5433/adgear_vertica;targetDriver=com.vertica.jdbc.Driver
+
+  # Whether to call JDBC setReadOnly
+  default_read_only: true
+
+  # any properties specific to your JDBC driver:
+  properties:
+    char_set: UTF-8
+    resultbuffersize: 128000000
+    BackupServerNode: aws-useast1b-riverticastage-1.sys.adgear.com,aws-useast1b-riverticastage-2.sys.adgear.com,aws-useast1b-riverticastage-3.sys.adgear.com,aws-useast1b-riverticastage-4.sys.adgear.com,aws-useast1b-riverticastage-5.sys.adgear.com,aws-useast1b-riverticastage-6.sys.adgear.com
+    Label: service-staging
+    #ConnectionLoadBalance: 1
+
+  # the maximum amount of time to wait on an empty pool before throwing an exception
+  max_wait_for_connection: 1s
+
+  # the SQL statements to run when initializing a pooled connection
+  initialization_query :
+
+  # the SQL query to run when validating a connection's liveness
+  validation_query: "/* adgear_reporting connection health check */ SELECT 1"
+
+  # the minimum number of connections to keep open
+  min_size: 1
+
+  # the maximum number of connections to keep open
+  max_size: 20
+
+  # whether or not idle connections should be validated
+  check_connection_while_idle: false
+
+  # how long a connection must be held before it can be validated
+  validation_interval: 10s
+
+  # the maximum lifetime of an idle connection
+  min_idle_time: 1 hour
+
+  # The default auto-commit state of the connections.
+  auto_commit_by_default: false
+
+  # checks connection on borrow from the connection pool
+  check_connection_on_borrow: true
+
+# Database settings.
+report_database:
+
+  # the name of your JDBC driver
+  driver_class: org.jdbcdslog.DriverLoggingProxy
+
+  # the username
+  user: ${RDS_USERNAME}
+
+  # the password
+  password: ${RDS_PASSWORD}
+
+  # the JDBC URL
+  url: jdbc:jdbcdslog:postgresql://reportingstage.caqkci0cb3iy.us-east-1.rds.amazonaws.com/reporting_staging;targetDriver=org.postgresql.Driver
+
+  # Whether to call JDBC setReadOnly
+  default_read_only: false
+
+  # Set to rollback when return results to avoid long transaction causing "current_date" error
+  rollback_on_return: true
+
+  # any properties specific to your JDBC driver:
+  properties:
+    char_set: UTF-8
+
+  # the maximum amount of time to wait on an empty pool before throwing an exception
+  max_wait_for_connection: 1s
+
+  # the SQL statements to run when initializing a pooled connection
+  initialization_query:
+
+  # the SQL query to run when validating a connection's liveness
+  validation_query: "/* adgear_reporting connection health check */ SELECT 1"
+
+  # the minimum number of connections to keep open
+  min_size: 1
+
+  # the maximum number of connections to keep open
+  max_size: 20
+
+  # whether or not idle connections should be validated
+  check_connection_while_idle: false
+
+  # how long a connection must be held before it can be validated
+  validation_interval: 10s
+
+  # the maximum lifetime of an idle connection
+  min_idle_time: 1 hour
+
+  properties: {
+    hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect,
+    hibernate.format_sql: true,
+    hibernate.use_sql_comments: true,
+    hibernate.temp.use_jdbc_metadata_defaults: false
+  }
+
+# Athena Database settings.
+athena_database:
+
+  # the name of your JDBC driver
+  driver_class: org.jdbcdslog.DriverLoggingProxy
+
+  # the username
+  user: ${VERTICA_USERNAME}
+
+  # the password
+  password: ${VERTICA_PASSWORD}
+
+  # the JDBC URL
+  url: jdbc:jdbcdslog:vertica://192.168.30.33:5433/adgear_vertica;targetDriver=com.vertica.jdbc.Driver
+  #url: jdbc:jdbcdslog:awsathena://AwsRegion=us-east-1;Schema=trader_staging;AwsCredentialsProviderClass=com.simba.athena.amazonaws.auth.DefaultAWSCredentialsProviderChain;S3OutputLocation=s3://adgear-reporting-staging-athena-output;targetDriver=com.simba.athena.jdbc.Driver;Workgroup=RI
+
+  # Whether to call JDBC setReadOnly
+  default_read_only: true
+
+  # any properties specific to your JDBC driver:
+  properties:
+    char_set: UTF-8
+
+  # the maximum amount of time to wait on an empty pool before throwing an exception
+  max_wait_for_connection: 1s
+
+  # the SQL statements to run when initializing a pooled connection
+  initialization_query :
+
+  # the minimum number of connections to keep open
+  min_size: 1
+
+  # the maximum number of connections to keep open
+  max_size: 1
+
+  # whether or not idle connections should be validated
+  check_connection_while_idle: false
+
+  # how long a connection must be held before it can be validated
+  validation_interval: 10s
+
+  # the maximum lifetime of an idle connection
+  min_idle_time: 1 hour
+
+  # The default auto-commit state of the connections.
+  auto_commit_by_default: false
+
+jmx_service_url: "service:jmx:jmxmp://127.0.0.1:12302"
+report_retention_period: "P32D"
+use_optimizer: true
+
+metrics:
+  reporters:
+    - type: graphite
+      host: 'graphite.int.adgear.com'
+      port: 2003
+      prefix: stats.adgear.aws-useast1b-reportingstage-1.staging
+      frequency: 10s
+
+query_cache:
+  memcached_hosts:
+    - 'localhost:11211'
+  max_cacheable_bytes: 1100000
+  as_of_time_expiry: 30s
+  query_expiry: 1h
+  get_wait_timeout: 50ms
+  memcached_metric_type: DEBUG
+
+environments:
+    trader_production:
+      database_schema: rtb_production
+      service_hostname: reporting-staging.trader.adgear.com
+
+      extract:
+        notification:
+          email:
+            from_address: AdGear Staging Support <donotreply@adgear.com>
+            signature: AdGear Staging Support <ads.mtl.support@samsung.com>
+            smtp_host: localhost
+            smtp_port: 25
+            smtp_connection_timeout_millisecond: 10000
+            smtp_timeout_millisecond: 10000
+            body_template: /usr/local/adgear-reporting/conf/staging/template/trader-staging-email.mustache
+          http:
+            name: default
+
+        archiver:
+          output_url_prefix: file:///var/lib/adgear-reporting-staging/trader_production
+          report_retention_period: "P35D"
+
+          aws:
+            s3_bucket: adgear-reporting-staging
+            s3_output_prefix: trader_production/
+            public_url_prefix: https://reporting-staging.trader.adgear.com/completed
+        workers:
+          - report_data_source: ATHENA
+            max_pending_reports_per_user_role: 5
+
+    trader_staging:
+      database_schema: rtb_staging
+      service_hostname: reporting-staging.staging.trader.adgear.com
+
+      extract:
+        notification:
+          email:
+            from_address: AdGear Staging Support <donotreply@adgear.com>
+            signature: AdGear Staging Support <ads.mtl.support@samsung.com>
+            smtp_host: localhost
+            smtp_port: 25
+            smtp_connection_timeout_millisecond: 10000
+            smtp_timeout_millisecond: 10000
+            body_template: /usr/local/adgear-reporting/conf/staging/template/trader-staging-email.mustache
+          http:
+            name: default
+
+        archiver:
+          output_url_prefix: file:///var/lib/adgear-reporting-staging/trader_staging
+          report_retention_period: "P35D"
+
+          aws:
+            s3_bucket: adgear-reporting-staging
+            s3_output_prefix: trader_staging/
+            public_url_prefix: https://reporting-staging.staging.trader.adgear.com/completed
+        workers:
+          - report_data_source: ATHENA
+            max_pending_reports_per_user_role: 5
+

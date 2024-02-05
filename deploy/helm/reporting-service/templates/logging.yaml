@@ -1,0 +1,18 @@
+{{- if .Values.logs.enabled -}}
+apiVersion: logging.banzaicloud.io/v1beta1
+kind: Flow
+metadata:
+  name: {{ include "reporting-service.fullname" . }}-logging-flow
+  labels:
+    {{- include "reporting-service.labels" . | nindent 4 }}
+spec:
+  filters:
+  - tag_normaliser:
+      format: reporting-service/${namespace_name}.${pod_name}.${container_name}
+  globalOutputRefs:
+  - {{ .Values.logs.output }}
+  match:
+  - select:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }} 

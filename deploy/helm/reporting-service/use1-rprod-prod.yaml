@@ -1,0 +1,171 @@
+environment: prod
+
+# GENERAL PROPERTIES START
+serviceaccount:
+  enabled: true
+serviceAccount:
+  annotations: 
+    meta.helm.sh/release-name: operational-reporting-service
+    meta.helm.sh/release-namespace: operational-reporting-service-prod
+  name: "reporting-service"
+
+podAnnotations:
+  iam.amazonaws.com/role: arn:aws:iam::652057145661:role/reporting-service-prod-role
+  reloader.stakater.com/auto: "true"
+
+podSecurityContext: {}
+securityContext: {}
+pvc:
+  enabled: true
+# GENERAL PROPERTIES END
+
+# REPORTING SERVICE APP PROPERTIES START
+app:
+  enabled: true
+  port : 12202
+  resources:
+     limits:
+        cpu: 4
+        memory: 10240Mi
+     requests:
+        cpu: 4
+        memory: 10240Mi
+
+prob:
+ enabled: true
+
+image:
+  repository: adgear-docker.jfrog.io/adgear/reporting-service-dw
+  tag: 6.175.0
+  pullPolicy: Always
+
+service_public:
+  enabled: true
+  type: NodePort
+  port: 80
+  targetPort: nginx
+  NodePort: 31168
+  annotations:
+    meta.helm.sh/release-name: operational-reporting-service
+    meta.helm.sh/release-namespace: operational-reporting-service-prod
+    alb.ingress.kubernetes.io/group.name: sanpublic-longto
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
+
+
+db_migration:
+  enabled: false
+
+workerReplicaCount: 2
+apiReplicaCount: 5
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+
+# REPORTING SERVICE APP PROPERTIES END
+
+# REPORTING CRONS START
+acl_sync:
+  enabled: true
+
+# REPORTING CRONS END
+
+# MEMCACHE PROPERTIES START 
+memcachedService:
+   port: 11211
+   targetPort: 11211
+# MEMCACHE PROPERTIES END
+
+# NGINX CONTAINER PROPERTIES START
+nginx:
+   image:
+     repository: nginx
+     pullPolicy: IfNotPresent
+     tag: "1.18.0"
+   resources:
+      limits:
+        cpu: 1
+        memory: 1280Mi
+      requests:
+        cpu: 1
+        memory: 1280Mi
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+logs:
+  enabled: true
+  output: loki-rprod-ri
+
+configDirs:
+  - nginx
+# NGINX CONTAINER PROPERTIES END
+
+# ALB INGRESS PROPERTIES START
+ingress_public:
+  enabled: true
+  class: alb
+  annotations:
+    alb.ingress.kubernetes.io/group.name: sanpublic-longto
+    alb.ingress.kubernetes.io/healthcheck-path: /status
+  hosts:
+    - host: reporting-service.trader.adgear.com
+      paths:
+        - path: /
+          port: 80
+    - host: reporting.trader.adgear.com
+      paths:
+        - path: /
+          port: 80
+# ALB INGRESS PROPERTIES END
+
+# METRICS PROPERTIES START
+metrics:
+  enabled: false
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 9090
+  targetPort: 9090
+  annotations:
+    meta.helm.sh/release-name: operational-reporting-service
+    meta.helm.sh/release-namespace: operational-reporting-service-prod
+# METRICS PROPERIES END
+
+#ALERTING SETUP START
+alerting:
+  enabled: true
+
+#ALERTING SETUP END
+
+
+# VAULT SECRETS START
+vault:
+  TX_SMTP_RELAY_HOST: "$(secret/reporting-and-insights/production/postfix TX_SMTP_RELAY_HOST)"
+  TX_SMTP_RELAY_USERNAME: "$(secret/reporting-and-insights/production/postfix TX_SMTP_RELAY_USERNAME)"
+  TX_SMTP_RELAY_PASSWORD: "$(secret/reporting-and-insights/production/postfix TX_SMTP_RELAY_PASSWORD)"
+  VERTICA_USERNAME: "$(secret/reporting-and-insights/production/reporting-service/vertica username)"
+  RDS_USERNAME: "$(secret/reporting-and-insights/production/reporting-service/report-db user)"
+  RDS_PASSWORD: "$(secret/reporting-and-insights/production/reporting-service/report-db password)"
+  Pagerduty_serviceKey: "$(secret/reporting-and-insights/production/pagerduty/reporting-service serviceKey)"
+  internalgrant: "$(secret/reporting-and-insights/production/internalgrant internalgrant)"
+vertica:
+  VERTICA_PASSWORD: "$(secret/reporting-and-insights/production/reporting-service/vertica password)"
+cronjob:
+  acl_sync_srcuser: "$(secret/reporting-and-insights/production/cronjob/trader-prod user)"
+  acl_sync_srcpasswd: "$(secret/reporting-and-insights/production/cronjob/trader-prod password)"
+  acl_sync_srchost: "$(secret/reporting-and-insights/production/cronjob/trader-prod host)"
+  acl_sync_targetuser: "$(secret/reporting-and-insights/production/reporting-service/report-db user)"
+  acl_sync_targetpasswd: "$(secret/reporting-and-insights/production/reporting-service/report-db password)"
+  acl_sync_targethost: "$(secret/reporting-and-insights/production/reporting-service/report-db host)"
+  PRUNE_AUTH_USERNAME: "$(secret/reporting-and-insights/production/cronjob/PRUNE_AUTH USERNAME)"
+cronjob_base64:
+  PRUNE_AUTH_PASSWORD: "$(secret/reporting-and-insights/production/cronjob/PRUNE_AUTH PASSWORD)"
+# VAULT SECRETS END

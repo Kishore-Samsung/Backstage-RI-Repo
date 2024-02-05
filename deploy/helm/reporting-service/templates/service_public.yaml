@@ -1,0 +1,20 @@
+{{- if .Values.service_public.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "reporting-service.fullname" . }}
+  labels:
+    {{- include "reporting-service-api.labels" . | nindent 4 }}
+    app: {{ include "reporting-service.fullname" . }}
+spec:
+  type: {{ .Values.service_public.type }}
+  externalTrafficPolicy: Local
+  ports:
+    - port: {{ .Values.service_public.port }}
+      targetPort: {{ .Values.service_public.targetPort }}
+      protocol: TCP
+      name: {{ include "reporting-service.fullname" . }}
+  selector:
+    {{- include "reporting-service-api.selectorLabels" . | nindent 4 }}
+
+{{- end -}}

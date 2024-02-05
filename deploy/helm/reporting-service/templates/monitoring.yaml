@@ -1,0 +1,95 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "reporting-service.fullname" . }}
+  labels:
+    {{- include "reporting-service.labels" . | nindent 4 }}
+spec:
+  endpoints:
+    - interval: 10s
+      targetPort: metrics
+      path: /metrics
+  selector:
+    matchLabels:
+      app: reporting-service
+      app.kubernetes.io/instance: reporting-service
+---
+{{- if .Values.alerting.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: reporting-and-service-alerting-rules-k8s
+  labels:
+      app: kube-prometheus-stack
+      release: prometheus-operator
+spec:
+  groups:
+    - name: reporting-and-service-alerting-rules-k8s
+      rules:
+        - alert: Reporting service CPU usage
+          expr: avg(max(rate(container_cpu_usage_seconds_total{namespace="reporting-service-{{ .Values.environment }}"})) by (pod)/sum(kube_pod_container_resource_requests{namespace="reporting-service-{{ .Values.environment }}", resource="cpu"}) by (pod)) > 70
+          labels:
+            severity: critical
+            team: reporting-and-insights-k8s
+            alert: CPU_usage
+          annotations:
+            info: reporting-service CPU utilization is above threshold
+          for: 5m
+        - alert: Reporting service Error rate
+          expr: (sum(rate(http_request_duration_count{namespace="reporting-service-{{ .Values.environment }}", status=~"5.."}[1h])) * 100) / sum(rate(http_request_duration_count{namespace="reporting-service-{{ .Values.environment }}"}[1h])) > 30
+          labels:
+            severity: critical
+            team: reporting-and-insights-k8s
+            alert: error-rate
+          annotations:
+            info: HTTP error rate in above threshold
+          for: 5m
+        - alert: Reporting service P90
+          expr: histogram_quantile(0.90,sum(rate(http_request_duration_bucket{namespace="reporting-service-{{ .Values.environment }}"}[1h])) by (le)) > 300
+          labels:
+            severity: critical
+            team: reporting-and-insights-k8s
+            alert: P90
+          annotations:
+            info: Reporting service latency in more that threshold value
+          for: 5m
+
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlertmanagerConfig
+metadata:
+  name: reporting-service-alerting-rules-k8s
+  labels:
+    alertmanagerConfig: reporting-service-alerting-rules-k8s
+spec:
+  route:
+    group_by:
+      - alertname
+    group_interval: 1m
+    repeat_interval: 5m
+    group_wait: 30s
+    receiver: void
+    routes:
+      - receiver: PagerDuty_ri_k8s
+        matchers:
+          - "severity = critical"
+          - "team = reporting-and-insights-k8s"
+      - receiver: void
+        matchers:
+          - "alertname =~ Tenant.*|Platform.*|dsp-for.*|use1-rpro.*|CRITICAL: use1-rpro.*|CRITICAL: use1-rdev.*"
+  receivers:
+  - name: PagerDuty_ri_k8s
+    pagerduty_configs:
+      - send_resolved: true
+        service_key:
+          name: {{ include "reporting-service.fullname" . }}-secret
+          key: Pagerduty_serviceKey
+        description: '{{`{{ template "pagerduty.adgear.title" . }}`}}'
+        details:
+            firing: '{{`{{ template "pagerduty.adgear.text" . }}`}}'
+            resolved: '{{`{{ template "pagerduty.default.instances" .Alerts.Resolved }}`}}'
+        severity: critical
+
+  - name: void
+{{- end }}

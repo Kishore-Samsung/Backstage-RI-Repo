@@ -1,0 +1,11 @@
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "reporting-service.fullname" . }}-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8G

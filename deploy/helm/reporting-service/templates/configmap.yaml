@@ -1,0 +1,19 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: app-configmap
+  labels:
+    {{- include "reporting-service.labels" . | nindent 4 }}
+data:
+  {{- if eq .Values.environment "staging" }}
+  configuration.yml : |-{{ .Files.Get "configuration/staging-configuration.yml" | nindent 4 }}
+  configuration.sh : |-{{ .Files.Get "cronjobs/staging-configuration.sh" | nindent 4 }}
+  {{- end }}
+  {{- if eq .Values.environment "prod" }}
+  configuration.yml : |-{{ .Files.Get "configuration/prod-configuration.yml" | nindent 4 }}
+  configuration.sh : |-{{ .Files.Get "cronjobs/prod-configuration.sh" | nindent 4 }}
+  {{- end }}
+
+  refresh_acls: |-{{ .Files.Get "cronjobs/refresh_acls" | nindent 4 }}
+  trader-email-template.mustache : |-{{ .Files.Get "configuration/trader-email-template.mustache" | nindent 4 }}
+
