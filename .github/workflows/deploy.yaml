@@ -1,1 +1,35 @@
+name: HELM deploy
 
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'github env to run this action'
+        required: true
+        default: "staging"
+        type: string
+      image_repository:
+        description: 'container image repository on docker registry'
+        required: true
+        default: "adgear-docker.jfrog.io/adgear/reporting-service-dw"
+        type: string
+      image_tag:
+        description: 'container image tag on docker registry'
+        required: true
+        type: string
+
+jobs:
+  helm-deploy:
+    runs-on: [ self-hosted, ubuntu-22.04-micro ]
+    # https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment
+    # TL;DR: As an admin of adgear-reporting-dw we have created 2 environments staging, production.
+    # these environments have some ENV variables pre-set for them like rancher cluster name, rancher project name
+    # More info here - https://github.com/adgear/ep-actions-runners/blob/main/docs/kubernetes.md#usage-example
+    # These are available are vars.* within the worflow
+    environment: ${{ inputs.environment }}
+    permissions: # permissions required by ep-actions/kubernetes-login
+      id-token: write
+      contents: read
+    steps:
+      - name: check out repository code
+        uses: actions/checkout@v3
