@@ -17,7 +17,6 @@ on:
         description: 'container image tag on docker registry'
         required: true
         type: string
-
 jobs:
   helm-deploy:
     runs-on: [ self-hosted, ubuntu-22.04-micro ]
